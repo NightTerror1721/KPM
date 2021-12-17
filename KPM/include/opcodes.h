@@ -4,6 +4,8 @@
 
 namespace kpm::opcodes
 {
+	class Opcode;
+
 	enum class OpcodeIdentifier : u8
 	{
 		move_r_r,
@@ -30,17 +32,34 @@ namespace kpm::opcodes
 
 		struct SizeScaleIndex
 		{
-			DataSize size : 2;
+			bool displacement : 1;
+			bool : 1;
 			u8 scale : 2;
 			RegisterId index : 4;
 		};
+
+		union ImmediateValue
+		{
+			u8 byte;
+			u16 word;
+			u32 dword;
+			u64 qword = 0;
+
+			s8 sbyte;
+			s16 sword;
+			s32 sdword;
+			s64 sqword;
+		};
 	}
+
+	
+	Opcode* read_opcode(void* dst, offset_t dst_off, const void* src, offset_t src_off);
 
 
 
 	class Opcode
 	{
-	private:
+	protected:
 		OpcodeIdentifier _id;
 
 	public:
@@ -57,12 +76,12 @@ namespace kpm::opcodes
 
 	struct move_r_r : public Opcode
 	{
-		args::SizeScaleIndex ssi;
+		args::DataSize size;
 		args::TwoRegisters regs;
 
-		inline move_r_r(args::SizeScaleIndex ssi, args::TwoRegisters registers) :
-			Opcode(OpcodeIdentifier::move_r_r), ssi(ssi), regs(registers) {}
-		inline move_r_r() : Opcode(OpcodeIdentifier::move_r_r), ssi(), regs() {}
+		inline move_r_r(args::DataSize size, args::TwoRegisters regs) :
+			Opcode(OpcodeIdentifier::move_r_r), size(size), regs(regs) {}
+		inline move_r_r() : Opcode(OpcodeIdentifier::move_r_r), size(), regs() {}
 
 		inline size_t size_in_bytes() const override { return 3; }
 
@@ -71,16 +90,45 @@ namespace kpm::opcodes
 		std::string to_string() override;
 	};
 
+
+
+	class OpcodeManager
+	{
+	private:
+		std::vector<Opcode*> _ops;
+
+	public:
+		OpcodeManager() = default;
+
+		OpcodeManager(const OpcodeManager& right);
+		OpcodeManager(OpcodeManager&& right) noexcept;
+		~OpcodeManager();
+
+		OpcodeManager& operator= (const OpcodeManager& right);
+		OpcodeManager& operator= (OpcodeManager&& right) noexcept;
+	};
+
+
+
+
+
+
 	struct move_r_a : public Opcode
 	{
+		args::DataSize size;
 		args::SizeScaleIndex ssi;
 		args::TwoRegisters regs;
+		args::ImmediateValue displ;
 
-		inline move_r_a(args::SizeScaleIndex ssi, args::TwoRegisters registers) :
-			Opcode(OpcodeIdentifier::move_r_a), ssi(ssi), regs(registers) {}
-		inline move_r_a() : Opcode(OpcodeIdentifier::move_r_r), ssi(), regs() {}
+		inline move_r_a(
+			args::DataSize size,
+			args::SizeScaleIndex ssi,
+			args::TwoRegisters regs,
+			args::ImmediateValue displ = {}) :
+			Opcode(OpcodeIdentifier::move_r_a), size(size), ssi(ssi), regs(regs), displ(displ) {}
+		inline move_r_a() : Opcode(OpcodeIdentifier::move_r_r), size(), ssi(), regs(), displ() {}
 
-		inline size_t size_in_bytes() const override { return 3; }
+		inline size_t size_in_bytes() const override { return ssi.displacement ? 5 : 4; }
 
 		void read(const void* buff) override;
 		void write(void* buff) const override;
